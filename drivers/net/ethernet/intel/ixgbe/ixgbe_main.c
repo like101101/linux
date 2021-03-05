@@ -1383,7 +1383,7 @@ static bool ixgbe_clean_tx_irq(struct ixgbe_q_vector *q_vector,
           q_vector->tx.per_itr_bytes += total_bytes;
           q_vector->tx.per_itr_desc += tx_desc_cnt;	  
           q_vector->tx.per_itr_free_budget += budget;
-        }
+	}
 	
 	if (check_for_tx_hang(tx_ring) && ixgbe_check_tx_hang(tx_ring)) {
 		/* schedule immediate reset if we believe we hung */
@@ -2604,7 +2604,7 @@ static int ixgbe_clean_rx_irq(struct ixgbe_q_vector *q_vector,
 	  q_vector->rx.per_itr_packets += total_rx_packets;
 	  q_vector->rx.per_itr_bytes += total_rx_bytes;	    
 	  q_vector->rx.per_itr_desc += rx_processed;	  
-	  q_vector->rx.per_itr_free_budget += budget - total_rx_packets;
+	  q_vector->rx.per_itr_free_budget += (budget - total_rx_packets);
 	}
 
 	return total_rx_packets;
@@ -3356,6 +3356,7 @@ inline static void write_nti32(void *p, const uint32_t v)
 static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
 {
 	struct ixgbe_q_vector *q_vector = data;
+
 	struct ixgbe_adapter *adapter = q_vector->adapter;
         struct ixgbe_hw *hw = &adapter->hw;
 	struct IxgbeLog *il;
@@ -3365,7 +3366,7 @@ static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
         uint64_t now = 0, last = 0, tmp = 0, res = 0;
 	struct cpuidle_device *cpu_idle_dev = __this_cpu_read(cpuidle_devices);
 	
-	/*u32 eicr = 0;       
+	/*u32 eicr = 0;
 	u32 eics0, eics1;
 
 	eics0 = eics1 = 0;
@@ -3382,16 +3383,17 @@ static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
           v_idx = q_vector->v_idx;
 	  il = &ixgbe_logs[v_idx];
 	    
-          icnt = il->itr_cnt;	  
+          icnt = il->itr_cnt;
 	  
           if (icnt < IXGBE_LOG_SIZE) {
 	    ile = &il->log[icnt];
 
 	    // save timestamp
-	    now = ixgbe_rdtsc();	    
+	    now = ixgbe_rdtsc();
 	    write_nti64(&ile->Fields.tsc, now);
 	    //ile->Fields.tsc = now;
-	    
+
+	    // capture on every interrupt
 	    /*if(il->perf_started) {
 	      // llc
 	      rdmsrl(0xC1, tmp);
@@ -3415,14 +3417,14 @@ static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
 	    }*/
 		    
 	    last = il->itr_joules_last_tsc;
-	    // ~1 ms has passed
+	    // capture after ~1 ms has passed
 	    if ((now - last) > ixgbe_tsc_per_milli) {
 	      // save joules
 	      rdmsrl(0x611, res);
 	      write_nti64(&ile->Fields.joules, res);
 	      //ile->Fields.joules = res;
 	      
-	      il->itr_joules_last_tsc = now;	      	      	      
+	      il->itr_joules_last_tsc = now;
 	      if(il->perf_started) {
 		// llc
 		rdmsrl(0xC1, tmp);
@@ -3446,15 +3448,15 @@ static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
 		
 		// c states, hardcoded for our processors
 		write_nti64(&ile->Fields.c1, (cpu_idle_dev->states_usage[1]).usage);
-		write_nti64(&ile->Fields.c1e, (cpu_idle_dev->states_usage[2]).usage);		
+		write_nti64(&ile->Fields.c1e, (cpu_idle_dev->states_usage[2]).usage);
 		write_nti64(&ile->Fields.c3, (cpu_idle_dev->states_usage[3]).usage);
 		write_nti64(&ile->Fields.c6, (cpu_idle_dev->states_usage[4]).usage);
 		write_nti64(&ile->Fields.c7, (cpu_idle_dev->states_usage[5]).usage);
 										      
 		//rdmsrl(0x3FC, res);
-		//ile->Fields.c3 = res;		
+		//ile->Fields.c3 = res;
 		//rdmsrl(0x3FD, res);
-		//ile->Fields.c6 = res;		
+		//ile->Fields.c6 = res;
 		//rdmsrl(0x3FE, res);
 		//write_nti64(&ile->Fields.c7, 0);
 		//ile->Fields.c7 = res;
@@ -3494,11 +3496,11 @@ static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
 	    //ile->Fields.c6 = (uint64_t)eics0;
 	    //ile->Fields.c7 = (uint64_t)eics1;
 	    
-	    //write_nti64(&ile->Fields.c3, (uint64_t)eicr);	    
+	    //write_nti64(&ile->Fields.c3, (uint64_t)eicr);
 	    //write_nti64(&ile->Fields.c6, (uint64_t)6);
 	    //write_nti64(&ile->Fields.c7, (uint64_t)7);
 	    
-	    //reset 
+	    //reset
 	    q_vector->rx.per_itr_desc = 0;
 	    q_vector->rx.per_itr_packets = 0;
 	    q_vector->rx.per_itr_bytes = 0;
@@ -3537,13 +3539,6 @@ int ixgbe_poll(struct napi_struct *napi, int budget)
 	struct ixgbe_ring *ring;
 	int per_ring_budget, work_done = 0;
 	bool clean_complete = true;
-	//int v_idx = q_vector->v_idx;
-
-	/*if(hw->mac.addr[ETH_ALEN-1] == 0x20
-	   && adapter->itr_cookie == 0
-	   && v_idx == 1) {
-          adapter->non_itr_cnt ++;
-	  }*/
 	
 #ifdef CONFIG_IXGBE_DCA
 	if (adapter->flags & IXGBE_FLAG_DCA_ENABLED)
@@ -3594,13 +3589,6 @@ int ixgbe_poll(struct napi_struct *napi, int budget)
 			ixgbe_irq_enable_queues(adapter,
 						BIT_ULL(q_vector->v_idx));
 	}
-
-	/*if(hw->mac.addr[ETH_ALEN-1] == 0x20
-	   && adapter->itr_cookie == 1
-	   && v_idx == 1) {
-          adapter->itr_cookie = 0;
-	  }*/
-
 	 
 	return min(work_done, budget - 1);
 }
@@ -7170,7 +7158,7 @@ int ixgbe_open(struct net_device *netdev)
 	//u8 inb0x43, inb0x40_1, inb0x40_2, lo, hi;
 	//uint16_t start_tick, end_tick, total_tick;
 	//uint64_t start_tsc, end_tsc, total_tsc, freq, step;	  
-
+	
 	printk(KERN_INFO "ixgbe_open()\n");
 	
 	printk(KERN_INFO "cpuidle stats state_count=%d\n", drv->state_count);
@@ -11385,6 +11373,8 @@ static int ixgbe_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto err_sw_init;
 	}
 
+	printk(KERN_INFO "*** ixgbe_probe device_id=%u vendor_id=%u\n", hw->device_id, hw->vendor_id);
+	
 #ifdef CONFIG_PCI_IOV
 	/* SR-IOV not supported on the 82598 */
 	if (adapter->hw.mac.type == ixgbe_mac_82598EB)
@@ -11655,8 +11645,7 @@ skip_sriov:
 			true);
 
 	ixgbe_mii_bus_init(hw);
-
-	printk(KERN_INFO "ixgbe_probe device_id=%u vendor_id=%u\n", hw->device_id, hw->vendor_id);
+	
 	return 0;
 
 err_register:

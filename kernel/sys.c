@@ -911,6 +911,67 @@ SYSCALL_DEFINE1(setfsgid, gid_t, gid)
 }
 #endif /* CONFIG_MULTIUSER */
 
+int symbi_check_elevate(void);
+int symbi_check_elevate(){
+  return current->symbiote_elevated;
+}
+
+unsigned long kernel_gs_base_elevate, user_gs_base_elevate;
+
+void symbi_lower(void);
+void symbi_lower(){
+  // Set to lowered if set.
+  if(current->symbiote_elevated == 1 ){
+    current->symbiote_elevated = 0;
+  } else{
+    printk("Trying to lower non elevated task???\n");
+  }
+  // Write it into the msr
+   wrmsrl(MSR_KERNEL_GS_BASE, user_gs_base_elevate);
+}
+
+void symbi_elevate(void);
+void symbi_elevate(){
+  // Set to elevated if unset.
+  if(current->symbiote_elevated == 1 ){
+    printk("Already Elevated???\n");
+  } else{
+    current->symbiote_elevated = 1;
+  }
+
+  // Read current GS_BASE
+  rdmsrl(MSR_GS_BASE, kernel_gs_base_elevate);
+
+  // NOTE: MSR terminology make this look backwards.
+  // MSR_KERNEL_GS_BASE is the not currently active version.
+  rdmsrl(MSR_KERNEL_GS_BASE, user_gs_base_elevate);
+
+  // Write it into the msr
+  wrmsrl(MSR_KERNEL_GS_BASE, kernel_gs_base_elevate);
+}
+
+// Returns elevation status: 1-elevated 0-lowered.
+// Returns -1 on incorrect input.
+SYSCALL_DEFINE1(elevate, int, direction)
+{
+  // Input request direction: 1-elevate 0-check -1-lower
+  if(direction == 0){
+    return symbi_check_elevate();
+
+  } else if(direction == -1){
+    symbi_lower();
+    return symbi_check_elevate();
+
+  } else if(direction == 1){
+    symbi_elevate();
+    return symbi_check_elevate();
+
+  } else{
+    printk("Unexpected input %d\n", direction);
+    return -1;
+  }
+}
+
 /**
  * sys_getpid - return the thread group id of the current process
  *

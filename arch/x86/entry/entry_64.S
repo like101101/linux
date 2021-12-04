@@ -128,7 +128,7 @@ SYM_INNER_LABEL(entry_SYSCALL_64_after_hwframe, SYM_L_GLOBAL)
 	testb	$0x1, %al
 	popq	%rax
 
-#if 0
+#if 1
 	jnz	symbi_swapgs_restore_regs_and_return_to_usermode_iret
 #else
 	jnz	symbi_swapgs_restore_regs_and_return_to_usermode_ret

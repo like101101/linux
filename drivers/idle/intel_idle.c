@@ -921,6 +921,9 @@ static __cpuidle int intel_idle(struct cpuidle_device *dev,
 		}
 	}
 
+	// same as EbbRT now
+	dev->intel_idle_states_usage[index] += 1;
+	
 	mwait_idle_with_hints(eax, ecx);
 
 	if (!static_cpu_has(X86_FEATURE_ARAT) && tick)

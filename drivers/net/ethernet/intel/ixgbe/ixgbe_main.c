@@ -154,7 +154,7 @@ static int ct_show(struct seq_file *s, void *v)
   //ile = &il->log[(int)*spos+i];
   ile = &il->log[(int)*spos];
   if(ile->Fields.tsc != 0) {
-    seq_printf(s, "%u %u %u %u %u %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu\n",
+    seq_printf(s, "%u %u %u %u %u %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu\n",
 	       (unsigned int)*spos,
 	       ile->Fields.rx_desc, ile->Fields.rx_bytes,
 	       ile->Fields.tx_desc, ile->Fields.tx_bytes,
@@ -162,6 +162,7 @@ static int ct_show(struct seq_file *s, void *v)
 	       ile->Fields.ncycles,
 	       ile->Fields.nref_cycles,
 	       ile->Fields.nllc_miss,
+	       ile->Fields.c0,
 	       ile->Fields.c1,
 	       ile->Fields.c1e,
 	       ile->Fields.c3,
@@ -3365,19 +3366,51 @@ static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
         int icnt = 0;
         uint64_t now = 0, last = 0, tmp = 0, res = 0;
 	struct cpuidle_device *cpu_idle_dev = __this_cpu_read(cpuidle_devices);
-	
-	/*u32 eicr = 0;
-	u32 eics0, eics1;
 
-	eics0 = eics1 = 0;
-	
-	// read without clearing IXGBE_EICR
-	eicr = IXGBE_READ_REG(hw, IXGBE_EICS);
-	//eicr = IXGBE_READ_REG(hw, IXGBE_EICR);
-	eics0 = IXGBE_READ_REG(hw, IXGBE_EICS_EX(0));
-	eics1 = IXGBE_READ_REG(hw, IXGBE_EICS_EX(1));
-	*/
+	/*if(hw->mac.addr[ETH_ALEN-1] == 0x00 || hw->mac.addr[ETH_ALEN-1] == 0x04 || hw->mac.addr[ETH_ALEN-1] == 0x82) {
+          v_idx = q_vector->v_idx;
+	  il = &ixgbe_logs[v_idx];
+	    
+          icnt = il->itr_cnt;	  
+          if (icnt < IXGBE_LOG_SIZE) {
+	    ile = &il->log[icnt];	    
 
+	    // initialize perf counters
+	    if(il->perf_started == 0) {
+	      // init ins, cycles. ref_cycles
+	      wrmsrl(0x38D, 0x333);
+	      
+	      // init llc_miss
+	      wrmsrl(0x186, 0x43412E);
+	      
+	      // start
+	      wrmsrl(0x38F, 0x700000001);	      
+	      il->perf_started = 1;
+	    }	  
+
+	    // save timestamp
+	    now = ixgbe_rdtsc();
+	    write_nti64(&ile->Fields.tsc, now);
+	    
+	    write_nti32(&(ile->Fields.rx_desc), q_vector->rx.per_itr_desc);
+	    write_nti32(&(ile->Fields.rx_bytes), q_vector->rx.per_itr_bytes);
+	    write_nti32(&(ile->Fields.rx_free_budget), q_vector->rx.per_itr_free_budget);
+	    
+	    //reset
+	    q_vector->rx.per_itr_desc = 0;
+	    q_vector->rx.per_itr_packets = 0;
+	    q_vector->rx.per_itr_bytes = 0;
+            q_vector->rx.per_itr_free_budget = 0;
+
+            q_vector->tx.per_itr_desc = 0;
+            q_vector->tx.per_itr_packets = 0;
+            q_vector->tx.per_itr_bytes = 0;
+            q_vector->tx.per_itr_free_budget = 0;
+
+	    il->itr_cnt++;
+          }
+	}*/
+	
 	// log data into memory
         if(hw->mac.addr[ETH_ALEN-1] == 0x00 || hw->mac.addr[ETH_ALEN-1] == 0x04 || hw->mac.addr[ETH_ALEN-1] == 0x82) {
           v_idx = q_vector->v_idx;
@@ -3394,27 +3427,27 @@ static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
 	    //ile->Fields.tsc = now;
 
 	    // capture on every interrupt
-	    /*if(il->perf_started) {
+	    //if(il->perf_started) {
 	      // llc
-	      rdmsrl(0xC1, tmp);
-	      write_nti64(&ile->Fields.nllc_miss, tmp);
+	      //rdmsrl(0xC1, tmp);
+	      //write_nti64(&ile->Fields.nllc_miss, tmp);
 	      //ile->Fields.nllc_miss = tmp;
 	      
 	      // ins
-	      rdmsrl(0x309, tmp);
-	      write_nti64(&ile->Fields.ninstructions, tmp);
+	      //rdmsrl(0x309, tmp);
+	      //write_nti64(&ile->Fields.ninstructions, tmp);
 	      //ile->Fields.ninstructions = tmp;
 	      
 	      // cycles
-	      rdmsrl(0x30A, tmp);
-	      write_nti64(&ile->Fields.ncycles, tmp);
+	      //rdmsrl(0x30A, tmp);
+	      //write_nti64(&ile->Fields.ncycles, tmp);
 	      //ile->Fields.ncycles = tmp;
 	      
 	      // ref cycles
-	      rdmsrl(0x30B, tmp);
-	      write_nti64(&ile->Fields.nref_cycles, tmp);
+	      //rdmsrl(0x30B, tmp);
+	      //write_nti64(&ile->Fields.nref_cycles, tmp);
 	      //ile->Fields.nref_cycles = tmp;
-	    }*/
+	    //}
 		    
 	    last = il->itr_joules_last_tsc;
 	    // capture after ~1 ms has passed
@@ -3447,12 +3480,24 @@ static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
 		//ile->Fields.nref_cycles = tmp;
 		
 		// c states, hardcoded for our processors
-		write_nti64(&ile->Fields.c1, (cpu_idle_dev->states_usage[1]).usage);
+		/*write_nti64(&ile->Fields.c1, (cpu_idle_dev->states_usage[1]).usage);
 		write_nti64(&ile->Fields.c1e, (cpu_idle_dev->states_usage[2]).usage);
 		write_nti64(&ile->Fields.c3, (cpu_idle_dev->states_usage[3]).usage);
 		write_nti64(&ile->Fields.c6, (cpu_idle_dev->states_usage[4]).usage);
 		write_nti64(&ile->Fields.c7, (cpu_idle_dev->states_usage[5]).usage);
-										      
+		*/
+
+		write_nti64(&ile->Fields.c0, cpu_idle_dev->intel_idle_states_usage[0]);
+		write_nti64(&ile->Fields.c1, cpu_idle_dev->intel_idle_states_usage[1]);
+		write_nti64(&ile->Fields.c1e, cpu_idle_dev->intel_idle_states_usage[2]);
+		write_nti64(&ile->Fields.c3, cpu_idle_dev->intel_idle_states_usage[3]);
+		write_nti64(&ile->Fields.c6, cpu_idle_dev->intel_idle_states_usage[4]
+			    +cpu_idle_dev->intel_idle_states_usage[6]
+			    +cpu_idle_dev->intel_idle_states_usage[7]
+			    +cpu_idle_dev->intel_idle_states_usage[8]
+			    +cpu_idle_dev->intel_idle_states_usage[9]);
+		write_nti64(&ile->Fields.c7, cpu_idle_dev->intel_idle_states_usage[5]);
+		
 		//rdmsrl(0x3FC, res);
 		//ile->Fields.c3 = res;
 		//rdmsrl(0x3FD, res);
@@ -3513,7 +3558,7 @@ static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
 
 	    il->itr_cnt++;
           }
-        }
+	}
 
 	/* EIAM disabled interrupts (on this vector) for us */
 

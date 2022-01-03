@@ -546,7 +546,7 @@ struct ixgbe_mac_addr {
 };
 
 union IxgbeLogEntry {
-  long long data[13];
+  long long data[14];
   struct {
     long long tsc;             // 1
     long long ninstructions;   // 2
@@ -555,22 +555,35 @@ union IxgbeLogEntry {
     long long nllc_miss;       // 5
     long long joules;          // 6
 
-    long long c1;              // 7
-    long long c1e;             // 8
-    long long c3;              // 9
-    long long c6;              // 10
-    long long c7;              // 11
+    long long c0;              // 7 - POLL
+    long long c1;              // 8
+    long long c1e;             // 9
+    long long c3;              // 10
+    long long c6;              // 11
+    long long c7;              // 12
     
-    unsigned int rx_desc;      // 12
+    unsigned int rx_desc;      // 13
     unsigned int rx_bytes;     // 13
     unsigned int tx_desc;      // 14
-    unsigned int tx_bytes;     // 15
+    unsigned int tx_bytes;     // 14
   } __attribute((packed)) Fields;
 } __attribute((packed));
 
+/*union IxgbeLogEntry {
+  long long data[3];
+  struct {
+    long long tsc;                // 1    
+    unsigned int rx_desc;         // 2
+    unsigned int rx_bytes;        // 2.5
+    unsigned int rx_free_budget;  // 3
+    unsigned int pad;             // 3.5
+  } __attribute((packed)) Fields;
+  } __attribute((packed));
+*/
+
 #define IXGBE_CACHE_LINE_SIZE 64
 //#define IXGBE_LOG_SIZE 200
-#define IXGBE_LOG_SIZE 2000000
+#define IXGBE_LOG_SIZE 1000000
 //#define IXGBE_LOG_SIZE 20
 //#define IXGBE_LOG_SIZE 200000
 

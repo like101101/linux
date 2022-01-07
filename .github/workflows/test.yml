@@ -38,5 +38,6 @@ jobs:
       - name: Simple Test Run
         run: |
           cd linux/test/
+          git update-index --chmod=+x ./simple_test.sh
           ./simple_test.sh
           

@@ -38,4 +38,5 @@ jobs:
       - name: Compile Linux kernel
         run: |
           cd linux/
-          make all
+          make __all
+          

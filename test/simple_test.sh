@@ -1,9 +1,6 @@
 if [[ ! -a kernel ]]; then
-    echo "FAIL: kernel not made"
-    echo "0/1"
-    exit -1
+    echo "Detected: kernel not made"
+    echo "Test: 0/1"
 fi
 
-echo PASS
-echo 1/1
-
+echo "Test Complete"

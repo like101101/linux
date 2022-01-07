@@ -26,8 +26,11 @@ jobs:
         uses: actions/checkout@v2
         with:
             path: linux
-    
-      #Clone Repos - Token is required for cloning private repositories
-      - name: Clone Dependency Repos
-        uses: ./linux/.github/workflows/composite/clone
+      
+      # Installs required packages for build
+      - name: Update and install package requirements
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install git build-essential flex bison supermin libelf-dev libssl-dev texinfo libgmp3-dev libmpc-dev libmpfr-dev qemu-kvm
 

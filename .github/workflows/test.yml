@@ -38,10 +38,11 @@ jobs:
       - name: Compile Linux kernel
         run: |
           cd linux/
-          make
+          make oldconfig
+          make all
         
       # Runs A Simple Test
-      - name: Compile Linux kernel
+      - name: Simple Test Run
         run: |
           cd linux/test/
           ./simple_test.sh

@@ -30,5 +30,4 @@ jobs:
       #Clone Repos - Token is required for cloning private repositories
       - name: Clone Dependency Repos
         uses: ./linux/.github/workflows/composite/clone
-        with: 
-          ukl_token: ${{ secrets.UKLCLI }}
+

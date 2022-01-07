@@ -33,13 +33,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install git build-essential flex bison supermin libelf-dev libssl-dev texinfo libgmp3-dev libmpc-dev libmpfr-dev qemu-kvm
-
-      # Runs Make All to build the Linux kernel
-      - name: Compile Linux kernel
-        run: |
-          cd linux/
-          make oldconfig
-          make all
         
       # Runs A Simple Test
       - name: Simple Test Run

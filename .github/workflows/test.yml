@@ -22,7 +22,7 @@ jobs:
     steps:
           
       #Checkout Linux repo - branch 5.14      
-      - name: checkout Linux UKL Repo
+      - name: checkout Linux Repo
         uses: actions/checkout@v2
         with:
             path: linux

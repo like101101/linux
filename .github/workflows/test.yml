@@ -38,5 +38,11 @@ jobs:
       - name: Compile Linux kernel
         run: |
           cd linux/
-          make __all
+          make
+        
+      # Runs A Simple Test
+      - name: Compile Linux kernel
+        run: |
+          cd linux/test/
+          ./simple_test.sh
           

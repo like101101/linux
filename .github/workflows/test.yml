@@ -34,6 +34,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install git build-essential flex bison supermin libelf-dev libssl-dev texinfo libgmp3-dev libmpc-dev libmpfr-dev qemu-kvm
         
+      # Compile the kernel
+      - name: Compile the kernel
+        run: |
+          cd linux/
+          make -C linux olddefconfig
+          
       # Runs A Simple Test
       - name: Simple Test Run
         run: |

@@ -37,7 +37,6 @@ jobs:
       # Compile the kernel
       - name: Compile the kernel
         run: |
-          cd linux/
           make -C linux olddefconfig
           
       # Runs A Simple Test

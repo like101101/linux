@@ -32,13 +32,12 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install git build-essential flex bison supermin libelf-dev libssl-dev texinfo libgmp3-dev libmpc-dev libmpfr-dev qemu-kvm
+          sudo apt-get install git build-essential flex bison supermin libelf-dev libssl-dev texinfo libgmp3-dev libmpc-dev libmpfr-dev qemu-kvm supermin
         
       # Compile the kernel
       - name: Compile the kernel
         run: |
           make -C linux olddefconfig
-          make -C linux -j$(shell nproc)
           
       # Runs A Simple Test
       - name: Simple Test Run

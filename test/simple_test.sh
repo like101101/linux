@@ -4,4 +4,4 @@ if [[ ! -a kernel ]]; then
 fi
 
 echo "Test Complete"
-echo "sadasd"
+echo "Hi"

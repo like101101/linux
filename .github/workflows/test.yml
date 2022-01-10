@@ -38,6 +38,7 @@ jobs:
       - name: Compile the kernel
         run: |
           make -C linux olddefconfig
+          make -C linux -j$(shell nproc)
           
       # Runs A Simple Test
       - name: Simple Test Run

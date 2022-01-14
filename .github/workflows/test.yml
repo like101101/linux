@@ -48,19 +48,17 @@ jobs:
           make -C linux defconfig
           make -C linux -j$(nproc)
           
-      # Runs a boot
-      - name: boot Run
+      # Boot the Kernel
+      - name: Boot the Kernel
         run: |  
           ls
           cd min-initrd 
           make build-package
           make all
           export SUPERMIN_KERNEL=/boot/vmlinuz-5.14.0 export SUPERMIN_MODULES=/lib/modules/5.14.0+/
-          make runU2
           
-
-      # Runs A Simple Test
-      - name: Simple Test Run
+      # Runs Boot Test
+      - name: Boot Test Run
         run: |
           cd linux/test/
           chmod +x ./simple_test.sh

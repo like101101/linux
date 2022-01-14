@@ -1,1 +1,26 @@
+# This Composite Workflow is Used to perform the repetitive task of cloning repos and installing dependencies
+# required for compiling and running the UKL
 
+name: "CLONE REPOS"
+description: "Clones all linux Dependency Repos"
+    
+runs:
+  using: "composite"
+  steps:
+    
+    # Checks-out Makefile from repo
+    - name: Checkout min-initrd directory
+      uses: actions/checkout@v2
+      with:
+        repository: like101101/min-initrd
+        path: min-initrd
+    
+    #Copy the Linux Directory into the min-initrd directory
+    - name: Copy Linux dir into like dir
+      shell: bash
+      run: |
+        export BASE_DIR=`pwd`
+        mv $BASE_DIR/linux min-initrd/
+        cd min-initrd
+            
+  

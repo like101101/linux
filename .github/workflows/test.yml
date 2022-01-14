@@ -28,11 +28,13 @@ jobs:
             path: linux
       
       # Installs required packages for build
-      #- name: Update and install package requirements
-       # shell: bash
-        #run: |
-         # sudo apt-get update
-          #sudo apt-get install git build-essential flex bison supermin libelf-dev libssl-dev texinfo libgmp3-dev libmpc-dev libmpfr-dev qemu-kvm supermin
+      - name: Update and install package requirements
+        shell: bash
+      #flex bison libelf-dev libssl-dev texinfo libgmp3-dev libmpc-dev libmpfr-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install git build-essential  qemu-kvm supermin 
+          
         
        # Checks-out Makefile from repo
       - name: Checkout min-initrd directory
@@ -42,10 +44,10 @@ jobs:
           path: min-initrd
           
       # Compile the kernel
-      #- name: Compile the kernel
-       # run: |
-        #  make -C linux defconfig
-         # make -C linux -j$(nproc)
+      - name: Compile the kernel
+        run: |
+          make -C linux defconfig
+          make -C linux -j$(nproc)
           
       # Runs a boot
       - name: boot Run

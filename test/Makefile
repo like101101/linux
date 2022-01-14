@@ -17,9 +17,7 @@ UKL_FLAGS=-ggdb -mno-red-zone -mcmodel=kernel -fno-pic
 
 #Unit Test
 unit_test: 
-  ld -r -o unit_test.ukl --allow-multiple-definition $(CRT_STARTS) unit_test.o \
-                --start-group --whole-archive  $(PTHREAD_LIB) \
-                $(C_LIB) --no-whole-archive $(SYS_LIBS) --end-group $(CRT_ENDS)
+	ld -r -o unit_test.ukl unit_test.o 
 	ar cr UKL.a unit_test.ukl
 	objcopy --prefix-symbols=ukl_ UKL.a
 	objcopy --redefine-syms=redef_sym_names UKL.a

@@ -42,10 +42,10 @@ jobs:
           path: min-initrd
           
       # Compile the kernel
-      - name: Compile the kernel
-        run: |
-          make -C linux defconfig
-          make -C linux -j$(nproc)
+      #- name: Compile the kernel
+       # run: |
+        #  make -C linux defconfig
+         # make -C linux -j$(nproc)
           
       # Runs a boot
       - name: boot Run

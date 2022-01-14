@@ -34,13 +34,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install git build-essential flex bison supermin libelf-dev libssl-dev texinfo libgmp3-dev libmpc-dev libmpfr-dev qemu-kvm supermin
         
+       # Checks-out Makefile from repo
+      - name: Checkout min-initrd directory
+        uses: actions/checkout@v2
+        with:
+          repository: like101101/min-initrd
+          path: min-initrd
+          
       # Compile the kernel
       - name: Compile the kernel
         run: |
           make -C linux defconfig
           make -C linux -j$(nproc)
-          make -C bzimage -j$(nproc)
           
+      # Runs a boot
+      - name: boot Run
+        run: |  
+          cd linux/min-initrd
+          make runU2
+          
+
       # Runs A Simple Test
       - name: Simple Test Run
         run: |

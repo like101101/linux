@@ -20,7 +20,7 @@ unit_test:
   ld -r -o unit_test.ukl --allow-multiple-definition $(CRT_STARTS) unit_test.o \
                 --start-group --whole-archive  $(PTHREAD_LIB) \
                 $(C_LIB) --no-whole-archive $(SYS_LIBS) --end-group $(CRT_ENDS)
-	ar cr UKL.a unit_test.ukl undefined_sys_hack.o
+	ar cr UKL.a unit_test.ukl
 	objcopy --prefix-symbols=ukl_ UKL.a
 	objcopy --redefine-syms=redef_sym_names UKL.a
 	- rm -rf linux/vmlinux

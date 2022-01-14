@@ -14,7 +14,7 @@ on:
 
 jobs:
 
-  TEST:
+  LINUX_COMPLIE_TEST:
   
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
@@ -53,7 +53,7 @@ jobs:
         run: |  
           ls
           cd min-initrd
-          make runU2
+          export SUPERMIN_KERNEL=/boot/vmlinuz-5.14.0 export SUPERMIN_MODULES=/lib/modules/5.14.0+/ make
           
 
       # Runs A Simple Test

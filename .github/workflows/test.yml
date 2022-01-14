@@ -30,10 +30,9 @@ jobs:
       # Installs required packages for build
       - name: Update and install package requirements
         shell: bash
-      #flex bison libelf-dev libssl-dev texinfo libgmp3-dev libmpc-dev libmpfr-dev
         run: |
           sudo apt-get update
-          sudo apt-get install git build-essential  qemu-kvm supermin 
+          sudo apt-get install git build-essential flex bison libelf-dev libssl-dev texinfo libgmp3-dev libmpc-dev libmpfr-devqemu-kvm supermin 
           
         
        # Checks-out Makefile from repo

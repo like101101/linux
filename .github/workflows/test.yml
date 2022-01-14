@@ -38,7 +38,7 @@ jobs:
       - name: Compile the kernel
         run: |
           make -C linux defconfig
-          make -C bzimage -j$(nproc)
+          make -C linux -j$(nproc)
           
       # Runs A Simple Test
       - name: Simple Test Run

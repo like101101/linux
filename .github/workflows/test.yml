@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install git build-essential flex bison libelf-dev libssl-dev texinfo libgmp3-dev libmpc-dev libmpfr-devqemu-kvm supermin 
+          sudo apt-get install git build-essential flex bison libelf-dev libssl-dev texinfo libgmp3-dev libmpc-dev libmpfr-dev qemu-kvm supermin 
           
         
        # Checks-out Makefile from repo

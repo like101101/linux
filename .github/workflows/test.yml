@@ -52,10 +52,10 @@ jobs:
       - name: boot Run
         run: |  
           ls
-          cd min-initrd
-          export SUPERMIN_KERNEL=/boot/vmlinuz-5.14.0 export SUPERMIN_MODULES=/lib/modules/5.14.0+/ 
+          cd min-initrd 
           make build-package
           make all
+          export SUPERMIN_KERNEL=/boot/vmlinuz-5.14.0 export SUPERMIN_MODULES=/lib/modules/5.14.0+/
           
 
       # Runs A Simple Test

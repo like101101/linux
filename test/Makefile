@@ -20,7 +20,6 @@ unit_test:
 	ld -r -o unit_test.ukl unit_test.o 
 	ar cr UKL.a unit_test.ukl
 	objcopy --prefix-symbols=ukl_ UKL.a
-	objcopy --redefine-syms=redef_sym_names UKL.a
 	- rm -rf linux/vmlinux
  #-----------------------------------------------------------------------------
 #-----------------------------------------------------------------------------

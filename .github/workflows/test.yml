@@ -60,7 +60,6 @@ jobs:
       # Runs Boot Test
       - name: Boot Test Run
         run: |
-          cd linux/test/
-          chmod +x ./simple_test.sh
-          ./simple_test.sh
+          cd min-initrd
+          make runU
           

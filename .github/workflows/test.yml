@@ -39,6 +39,7 @@ jobs:
         run: |
           make -C linux defconfig
           make -C linux -j$(nproc)
+          make -C bzimage -j$(nproc)
           
       # Runs A Simple Test
       - name: Simple Test Run

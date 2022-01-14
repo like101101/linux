@@ -10,12 +10,6 @@ rm ../unit_test.o
 #Make test
 make boot_test
 
-#Move Test file to UKL Directory
-cp unit_test.o ../
-
-#Navigate to UKL Directory
-cd ../
-
 #Build Test as UKL Application
 make unit_test
 

@@ -61,5 +61,5 @@ jobs:
       - name: Boot Test Run
         run: |
           cd linux/test/
-          chmod -x ./simple_test.sh
+          chmod +x ./simple_test.sh
           ./simple_test.sh

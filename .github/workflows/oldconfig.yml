@@ -1,4 +1,4 @@
-name: Linux config test
+name: Linux oldconfig test
 
 # Controls when the workflow will run
 on:

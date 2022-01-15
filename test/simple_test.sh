@@ -14,7 +14,7 @@ make boot_test
 make unit_test
 
 #Run boot test
-ls
+path
 sudo timeout 10m make runS
 
 #Check for Magic String to Verify that UKL Booted

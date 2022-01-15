@@ -29,5 +29,4 @@ unit_test:
 	gcc -c -o unit_test.o ./boot/boot_test.c $(UKL_FLAGS)
 
 runS:
-	cd ./linux
-	make run_sim -C min_initrd
+	make run_sim -C ./min_initrd

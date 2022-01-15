@@ -27,3 +27,6 @@ unit_test:
 #Boot Test
  boot_test:./boot/boot_test.c 
 	gcc -c -o unit_test.o ./boot/boot_test.c $(UKL_FLAGS)
+
+runS:
+	make run_sim -C min_initrd

@@ -35,7 +35,7 @@ jobs:
           sudo apt-get install git build-essential flex bison libelf-dev libssl-dev texinfo libgmp3-dev libmpc-dev libmpfr-dev qemu-kvm supermin 
           
         
-       # Checks-out Makefile from repo
+       # Checks-out Min-initrd
       - name: Checkout min-initrd directory
         uses: actions/checkout@v2
         with:
@@ -43,19 +43,16 @@ jobs:
           path: min-initrd
           
       # Compile the kernel
-      - name: Compile the kernel
-        run: |
-          make -C linux defconfig
-          make -C linux -j$(nproc)
+      #- name: Compile the kernel
+        #run: |
+          #make -C linux defconfig
+          #make -C linux -j$(nproc)
           
       # Boot the Kernel
       - name: Boot the Kernel
         run: |  
-          ls
           cd min-initrd 
-          make build-package
-          make all
-          export SUPERMIN_KERNEL=/boot/vmlinuz-5.14.0 export SUPERMIN_MODULES=/lib/modules/5.14.0+/
+          make 
           
       # Runs Boot Test
       - name: Boot Test Run

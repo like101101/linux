@@ -52,7 +52,9 @@ jobs:
       - name: Boot the Kernel
         run: |  
           cd min-initrd 
-          make 
+          make build-package
+          make supermin
+          make runU
           
       # Runs Boot Test
       - name: Boot Test Run

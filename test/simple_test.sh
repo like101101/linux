@@ -14,8 +14,9 @@ make boot_test
 make unit_test
 
 #Run boot test
-ls
-sudo timeout 10m make runS
+cd ../
+cd ../
+make runU -C min-initrd
 
 #Check for Magic String to Verify that UKL Booted
 #If Test fails, print QEMU output

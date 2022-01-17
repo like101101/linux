@@ -54,6 +54,7 @@ jobs:
           cd min-initrd 
           make build-package
           make supermin
+          make all
           make runU
           
       # Runs Boot Test

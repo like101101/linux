@@ -31,5 +31,5 @@ unit_test:
 runS:
 	cd ..
 	cd ..
-	cd min_initrd
+	cd min-initrd
 	make runU

@@ -55,7 +55,6 @@ jobs:
           make build-package
           make supermin
           make all
-          make runU
           
       # Runs Boot Test
       - name: Boot Test Run

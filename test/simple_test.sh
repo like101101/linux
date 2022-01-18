@@ -16,7 +16,7 @@ make unit_test
 #Run boot test
 cd ../
 cd ../
-make runU3 -C min-initrd
+make runU -C min-initrd
 
 #Check for Magic String to Verify that UKL Booted
 #If Test fails, print QEMU output

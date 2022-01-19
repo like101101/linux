@@ -42,24 +42,22 @@ jobs:
           repository: like101101/min-initrd
           path: min-initrd
           
-      # Compile the kernel
-      #- name: Compile the kernel
-        #run: |
-          #make -C linux defconfig
-          #make -C linux -j$(nproc)
+      #Compile the kernel
+      - name: Compile the kernel
+        run: |
+          make -C linux defconfig
+          make -C linux -j$(nproc)
           
       # Boot the Kernel
-      - name: Boot the Kernel
+      - name: Compile min-initrd
         run: |  
           cd min-initrd 
           make build-package
           make supermin
           make all
           
-      # Runs Boot Test
-      - name: Boot Test Run
+      # Boot the Kernel
+      - name: Boot the kernel
         run: |
-          cd linux/test/
-          echo $PATH
-          chmod +x ./simple_test.sh
-          ./simple_test.sh
+          cd min-initrd
+          make runU

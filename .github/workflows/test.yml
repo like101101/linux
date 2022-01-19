@@ -60,4 +60,4 @@ jobs:
       - name: Boot the kernel
         run: |
           cd min-initrd
-          make runU
+          make runU2

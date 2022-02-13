@@ -2,6 +2,7 @@
 /* Copyright(c) 1999 - 2018 Intel Corporation. */
 
 #include <linux/types.h>
+#include <linux/time.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/netdevice.h>
@@ -28,6 +29,7 @@
 #include <linux/bpf_trace.h>
 #include <linux/atomic.h>
 #include <linux/numa.h>
+#include <linux/version.h>
 #include <generated/utsrelease.h>
 #include <linux/cpuidle.h>
 #include <scsi/fc/fc_fcoe.h>
@@ -59,6 +61,10 @@
 
 extern unsigned int tsc_khz;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
+#define HAVE_PROC_OPS
+#endif
+
 char ixgbe_driver_name[] = "ixgbe";
 static const char ixgbe_driver_string[] =
 			      "Intel(R) 10 Gigabit PCI Express Network Driver";
@@ -73,6 +79,9 @@ static const char ixgbe_copyright[] =
 				"Copyright (c) 1999-2016 Intel Corporation.";
 
 static const char ixgbe_overheat_msg[] = "Network adapter has been stopped because it has over heated. Restart the computer. If the problem persists, power off the system and replace the adapter";
+
+#define DRV_VERSION "5.1.0-k"
+const char ixgbe_driver_version[] = DRV_VERSION;
 
 static const struct ixgbe_info *ixgbe_info_tbl[] = {
 	[board_82598]		= &ixgbe_82598_info,
@@ -227,6 +236,14 @@ static int ct_open(struct inode *inode, struct file *file)
   return ret; 
 }
 
+#ifdef HAVE_PROC_OPS
+static const struct proc_ops ct_file_ops = {
+  .proc_open = ct_open,
+  .proc_read = seq_read,
+  .proc_lseek = seq_lseek,
+  .proc_release = single_release,
+};
+#else
 static const struct file_operations ct_file_ops =
 {
  .owner   = THIS_MODULE,
@@ -235,6 +252,9 @@ static const struct file_operations ct_file_ops =
  .llseek  = seq_lseek,
  .release = seq_release
 };
+#endif
+
+
 
 /* ixgbe_pci_tbl - PCI Device ID Table
  *
@@ -2459,7 +2479,7 @@ static int ixgbe_clean_rx_irq(struct ixgbe_q_vector *q_vector,
 			       struct ixgbe_ring *rx_ring,
 			       const int budget)
 {
-	unsigned int total_rx_bytes = 0, total_rx_packets = 0, frame_sz = 0;
+	unsigned int total_rx_bytes = 0, total_rx_packets = 0;
 	struct ixgbe_adapter *adapter = q_vector->adapter;
 	struct ixgbe_hw *hw = &adapter->hw;
 #ifdef IXGBE_FCOE
@@ -2467,7 +2487,6 @@ static int ixgbe_clean_rx_irq(struct ixgbe_q_vector *q_vector,
 	unsigned int mss = 0;
 #endif /* IXGBE_FCOE */
 	u16 cleaned_count = ixgbe_desc_unused(rx_ring);
-	unsigned int offset = rx_ring->rx_offset;
 	unsigned int xdp_xmit = 0;
 	int rx_processed = 0;
 	struct xdp_buff xdp;
@@ -2503,16 +2522,15 @@ static int ixgbe_clean_rx_irq(struct ixgbe_q_vector *q_vector,
 
 		/* retrieve a buffer from the ring */
 		if (!skb) {
-			unsigned char *hard_start;
+			xdp.data = page_address(rx_buffer->page) +
+				   rx_buffer->page_offset;
+			xdp.data_meta = xdp.data;
+			xdp.data_hard_start = xdp.data -
+					      ixgbe_rx_offset(rx_ring);
+			xdp.data_end = xdp.data + size;
 
-			hard_start = page_address(rx_buffer->page) +
-				     rx_buffer->page_offset - offset;
-			xdp_prepare_buff(&xdp, hard_start, offset, size, true);
-#if (PAGE_SIZE > 4096)
-			/* At larger PAGE_SIZE, frame_sz depend on len size */
-			xdp.frame_sz = ixgbe_rx_frame_truesize(rx_ring, size);
-#endif
 			skb = ixgbe_run_xdp(adapter, rx_ring, &xdp);
+		
 		}
 
 		if (IS_ERR(skb)) {
@@ -3301,13 +3319,7 @@ static irqreturn_t ixgbe_msix_other(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-void do_gettimeofday(struct timeval *tv)
-{
-  struct timespec64 ts;
-  ktime_get_real_ts64(&ts);
-  tv->tv_sec = ts.tv_sec;
-  tv->tv_usec = ts.tv_nsec;
-}
+
 
 inline static uint64_t ixgbe_rdtsc(void) {
   uint64_t tsc;
@@ -11552,8 +11564,7 @@ skip_sriov:
 	ixgbe_mii_bus_init(hw);
 	return 0;
 
-err_netdev:
-	unregister_netdev(netdev);
+
 err_register:
 	ixgbe_release_hw_control(adapter);
 	ixgbe_clear_interrupt_scheme(adapter);

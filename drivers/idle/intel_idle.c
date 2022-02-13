@@ -120,19 +120,59 @@ static unsigned int mwait_substates __initdata;
  *
  * Must be called under local_irq_disable().
  */
+
+static __cpuidle int intel_idle(struct cpuidle_device *dev,
+				struct cpuidle_driver *drv, int index)
+{
+	unsigned long ecx = 1; /* break on interrupt flag */
+	struct cpuidle_state *state = &drv->states[index];
+	unsigned long eax = flg2MWAIT(state->flags);
+	unsigned int cstate;
+	bool tick;
+	int cpu = smp_processor_id();
+
+	/*
+	 * leave_mm() to avoid costly and often unnecessary wakeups
+	 * for flushing the user TLB's associated with the active mm.
+	 */
+	if (state->flags & CPUIDLE_FLAG_TLB_FLUSHED)
+		leave_mm(cpu);
+
+	if (!static_cpu_has(X86_FEATURE_ARAT)) {
+		cstate = (((eax) >> MWAIT_SUBSTATE_SIZE) &
+				MWAIT_CSTATE_MASK) + 1;
+		tick = false;
+		if (!(1 << (cstate))) {
+			tick = true;
+			tick_broadcast_enter();
+		}
+	}
+
+	// same as EbbRT now
+	dev->intel_idle_states_usage[index] += 1;
+	
+	mwait_idle_with_hints(eax, ecx);
+
+	if (!static_cpu_has(X86_FEATURE_ARAT) && tick)
+		tick_broadcast_exit();
+
+	return index;
+}
+
+
+/*
 static __cpuidle int intel_idle(struct cpuidle_device *dev,
 				struct cpuidle_driver *drv, int index)
 {
 	struct cpuidle_state *state = &drv->states[index];
 	unsigned long eax = flg2MWAIT(state->flags);
-	unsigned long ecx = 1; /* break on interrupt flag */
-
+	unsigned long ecx = 1;
 	mwait_idle_with_hints(eax, ecx);
 
 	return index;
-}
+} */
 
-/**
+/*
  * intel_idle_s2idle - Ask the processor to enter the given idle state.
  * @dev: cpuidle device of the target CPU.
  * @drv: cpuidle driver (assumed to point to intel_idle_driver).
@@ -972,43 +1012,7 @@ static struct cpuidle_state dnv_cstates[] __initdata = {
  *
  * Must be called under local_irq_disable().
  */
-static __cpuidle int intel_idle(struct cpuidle_device *dev,
-				struct cpuidle_driver *drv, int index)
-{
-	unsigned long ecx = 1; /* break on interrupt flag */
-	struct cpuidle_state *state = &drv->states[index];
-	unsigned long eax = flg2MWAIT(state->flags);
-	unsigned int cstate;
-	bool uninitialized_var(tick);
-	int cpu = smp_processor_id();
 
-	/*
-	 * leave_mm() to avoid costly and often unnecessary wakeups
-	 * for flushing the user TLB's associated with the active mm.
-	 */
-	if (state->flags & CPUIDLE_FLAG_TLB_FLUSHED)
-		leave_mm(cpu);
-
-	if (!static_cpu_has(X86_FEATURE_ARAT)) {
-		cstate = (((eax) >> MWAIT_SUBSTATE_SIZE) &
-				MWAIT_CSTATE_MASK) + 1;
-		tick = false;
-		if (!(lapic_timer_reliable_states & (1 << (cstate)))) {
-			tick = true;
-			tick_broadcast_enter();
-		}
-	}
-
-	// same as EbbRT now
-	dev->intel_idle_states_usage[index] += 1;
-	
-	mwait_idle_with_hints(eax, ecx);
-
-	if (!static_cpu_has(X86_FEATURE_ARAT) && tick)
-		tick_broadcast_exit();
-
-	return index;
-}
 
 /**
  * intel_idle_s2idle - simplified "enter" callback routine for suspend-to-idle

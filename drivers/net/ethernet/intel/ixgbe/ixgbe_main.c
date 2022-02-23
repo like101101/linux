@@ -2,6 +2,7 @@
 /* Copyright(c) 1999 - 2018 Intel Corporation. */
 
 #include <linux/types.h>
+#include <linux/time.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/netdevice.h>
@@ -28,7 +29,9 @@
 #include <linux/bpf_trace.h>
 #include <linux/atomic.h>
 #include <linux/numa.h>
+#include <linux/version.h>
 #include <generated/utsrelease.h>
+#include <linux/cpuidle.h>
 #include <scsi/fc/fc_fcoe.h>
 #include <net/udp_tunnel.h>
 #include <net/pkt_cls.h>
@@ -39,6 +42,15 @@
 #include <net/xdp_sock_drv.h>
 #include <net/xfrm.h>
 
+// procfs
+#include <linux/stat.h>
+#include <linux/string.h>
+#include <linux/sysfs.h>
+#include <uapi/linux/stat.h> /* S_IRUSR, S_IWUSR  */
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h> /* seq_read, seq_lseek, single_release */
+
+#include <linux/time.h>
 #include "ixgbe.h"
 #include "ixgbe_common.h"
 #include "ixgbe_dcb_82599.h"
@@ -46,6 +58,12 @@
 #include "ixgbe_sriov.h"
 #include "ixgbe_model.h"
 #include "ixgbe_txrx_common.h"
+
+extern unsigned int tsc_khz;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
+#define HAVE_PROC_OPS
+#endif
 
 char ixgbe_driver_name[] = "ixgbe";
 static const char ixgbe_driver_string[] =
@@ -62,6 +80,9 @@ static const char ixgbe_copyright[] =
 
 static const char ixgbe_overheat_msg[] = "Network adapter has been stopped because it has over heated. Restart the computer. If the problem persists, power off the system and replace the adapter";
 
+#define DRV_VERSION "5.1.0-k"
+const char ixgbe_driver_version[] = DRV_VERSION;
+
 static const struct ixgbe_info *ixgbe_info_tbl[] = {
 	[board_82598]		= &ixgbe_82598_info,
 	[board_82599]		= &ixgbe_82599_info,
@@ -72,6 +93,168 @@ static const struct ixgbe_info *ixgbe_info_tbl[] = {
 	[board_x550em_a]	= &ixgbe_x550em_a_info,
 	[board_x550em_a_fw]	= &ixgbe_x550em_a_fw_info,
 };
+
+unsigned int ixgbe_tsc_per_milli;
+struct IxgbeLog ixgbe_logs[16];
+static struct proc_dir_entry *ixgbe_stats_dir;
+static struct proc_dir_entry *ixgbe_core_dir;
+
+static void *ct_start(struct seq_file *s, loff_t *pos)
+{
+  loff_t *spos;
+  struct IxgbeLog *il;
+  unsigned long id = (unsigned long)s->private;
+  
+  il= &ixgbe_logs[id];
+  
+  //pr_info("ct_start pos = %llu il->itr_cnt=%u core=%ld\n", (unsigned long long)*pos, il->itr_cnt, id);
+  
+  spos = kmalloc(sizeof(loff_t), GFP_KERNEL);
+  if (!spos || (unsigned int)(*pos) >= (unsigned int)(il->itr_cnt)) {
+    memset(ixgbe_logs[id].log, 0, (sizeof(union IxgbeLogEntry) *  IXGBE_LOG_SIZE));
+    ixgbe_logs[id].itr_joules_last_tsc = 0;
+    ixgbe_logs[id].msix_other_cnt = 0;
+    ixgbe_logs[id].itr_cookie = 0;
+    ixgbe_logs[id].non_itr_cnt = 0;
+    ixgbe_logs[id].itr_cnt = 0;
+    ixgbe_logs[id].perf_started = 0;    
+    return NULL;
+  }
+  *spos = *pos;
+  return spos;
+}
+
+static void *ct_next(struct seq_file *s, void *v, loff_t *pos)
+{
+  loff_t *spos;
+  //int i;
+  unsigned long id = (unsigned long)s->private;
+  struct IxgbeLog *il;
+  il= &ixgbe_logs[id];
+  
+  spos = v;
+  if((unsigned int)(*pos) >= (unsigned int)(il->itr_cnt))
+    return NULL;
+  
+  //for(i=0;i<40;i++) {
+  *pos = ++*spos;
+  //}
+  //pr_info("ct_next pos = %llu il->itr_cnt=%u core=%ld\n", (unsigned long long)*pos, il->itr_cnt, id);
+  return spos;
+}
+
+/* Return 0 means success, SEQ_SKIP ignores previous prints, negative for error. */
+static int ct_show(struct seq_file *s, void *v)
+{
+  loff_t *spos;
+  //int i = 0;
+  unsigned long id = (unsigned long)s->private;
+  //int avail = s->size - s->count; //available bytes to write
+  //char buf[512];
+  
+  struct IxgbeLog *il;
+  union IxgbeLogEntry *ile;
+  
+  spos = v;
+  //pr_info("ct_show pos = %llu core=%ld\n", (unsigned long long)*spos, id);
+  
+  il= &ixgbe_logs[id];
+  //ile = &il->log[(int)*spos+i];
+  ile = &il->log[(int)*spos];
+  if(ile->Fields.tsc != 0) {
+    seq_printf(s, "%u %u %u %u %u %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu\n",
+	       (unsigned int)*spos,
+	       ile->Fields.rx_desc, ile->Fields.rx_bytes,
+	       ile->Fields.tx_desc, ile->Fields.tx_bytes,
+	       ile->Fields.ninstructions,
+	       ile->Fields.ncycles,
+	       ile->Fields.nref_cycles,
+	       ile->Fields.nllc_miss,
+	       ile->Fields.c0,
+	       ile->Fields.c1,
+	       ile->Fields.c1e,
+	       ile->Fields.c3,
+	       ile->Fields.c6,
+	       ile->Fields.c7,
+	       ile->Fields.joules,
+	       ile->Fields.tsc);
+  }
+  
+  // roughly 1 page of data
+  /*for (i = 0; i < 30; i++) {
+    ile = &il->log[(int)*spos+i];
+    if(ile->Fields.tsc != 0) {
+       seq_printf(s, "%u %u %u %u %u %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu\n",
+		 (unsigned int)*spos+i,
+		 ile->Fields.rx_desc, ile->Fields.rx_bytes,
+		 ile->Fields.tx_desc, ile->Fields.tx_bytes,
+		 ile->Fields.ninstructions,
+		 ile->Fields.ncycles,
+		 ile->Fields.nref_cycles,
+		 ile->Fields.nllc_miss,
+		 ile->Fields.c1,
+		 ile->Fields.c1e,
+		 ile->Fields.c3,
+		 ile->Fields.c6,
+		 ile->Fields.c7,
+		 ile->Fields.joules,
+		 ile->Fields.tsc);
+    }
+  }*/
+
+  return 0;
+}
+
+static void ct_stop(struct seq_file *s, void *v)
+{
+  //loff_t *spos;
+  //int core = 1;
+  //spos = v;
+  //pr_info("ct_stop pos = %llu\n", (unsigned long long)*spos);
+  //pr_info("ct_stop\n");
+  kfree(v);  
+}
+
+static struct seq_operations my_seq_ops =
+{
+ .next  = ct_next,
+ .show  = ct_show,
+ .start = ct_start,
+ .stop  = ct_stop,
+};
+
+static int ct_open(struct inode *inode, struct file *file)
+{
+  int ret;
+  
+  ret = seq_open(file, &my_seq_ops);
+  if(ret == 0) {
+    struct seq_file *m = file->private_data;
+    m->private = PDE_DATA(inode);
+  }
+  
+  return ret; 
+}
+
+#ifdef HAVE_PROC_OPS
+static const struct proc_ops ct_file_ops = {
+  .proc_open = ct_open,
+  .proc_read = seq_read,
+  .proc_lseek = seq_lseek,
+  .proc_release = single_release,
+};
+#else
+static const struct file_operations ct_file_ops =
+{
+ .owner   = THIS_MODULE,
+ .open    = ct_open,
+ .read    = seq_read,
+ .llseek  = seq_lseek,
+ .release = seq_release
+};
+#endif
+
+
 
 /* ixgbe_pci_tbl - PCI Device ID Table
  *
@@ -1116,7 +1299,9 @@ static bool ixgbe_clean_tx_irq(struct ixgbe_q_vector *q_vector,
 	unsigned int total_bytes = 0, total_packets = 0, total_ipsec = 0;
 	unsigned int budget = q_vector->tx.work_limit;
 	unsigned int i = tx_ring->next_to_clean;
-
+	struct ixgbe_hw *hw = &adapter->hw;
+	int tx_desc_cnt = 0;
+	
 	if (test_bit(__IXGBE_DOWN, &adapter->state))
 		return true;
 
@@ -1166,6 +1351,7 @@ static bool ixgbe_clean_tx_irq(struct ixgbe_q_vector *q_vector,
 		while (tx_desc != eop_desc) {
 			tx_buffer++;
 			tx_desc++;
+			tx_desc_cnt++;
 			i++;
 			if (unlikely(!i)) {
 				i -= tx_ring->count;
@@ -1186,6 +1372,7 @@ static bool ixgbe_clean_tx_irq(struct ixgbe_q_vector *q_vector,
 		/* move us one more past the eop_desc for start of next pkt */
 		tx_buffer++;
 		tx_desc++;
+		tx_desc_cnt++;
 		i++;
 		if (unlikely(!i)) {
 			i -= tx_ring->count;
@@ -1210,6 +1397,13 @@ static bool ixgbe_clean_tx_irq(struct ixgbe_q_vector *q_vector,
 	q_vector->tx.total_packets += total_packets;
 	adapter->tx_ipsec += total_ipsec;
 
+	if(hw->mac.addr[ETH_ALEN-1] == 0x00 || hw->mac.addr[ETH_ALEN-1] == 0x04 || hw->mac.addr[ETH_ALEN-1] == 0x82) {
+          q_vector->tx.per_itr_packets += total_packets;
+          q_vector->tx.per_itr_bytes += total_bytes;
+          q_vector->tx.per_itr_desc += tx_desc_cnt;	  
+          q_vector->tx.per_itr_free_budget += budget;
+	}
+	
 	if (check_for_tx_hang(tx_ring) && ixgbe_check_tx_hang(tx_ring)) {
 		/* schedule immediate reset if we believe we hung */
 		struct ixgbe_hw *hw = &adapter->hw;
@@ -2285,22 +2479,20 @@ static int ixgbe_clean_rx_irq(struct ixgbe_q_vector *q_vector,
 			       struct ixgbe_ring *rx_ring,
 			       const int budget)
 {
-	unsigned int total_rx_bytes = 0, total_rx_packets = 0, frame_sz = 0;
+	unsigned int total_rx_bytes = 0, total_rx_packets = 0;
 	struct ixgbe_adapter *adapter = q_vector->adapter;
+	struct ixgbe_hw *hw = &adapter->hw;
 #ifdef IXGBE_FCOE
 	int ddp_bytes;
 	unsigned int mss = 0;
 #endif /* IXGBE_FCOE */
 	u16 cleaned_count = ixgbe_desc_unused(rx_ring);
-	unsigned int offset = rx_ring->rx_offset;
 	unsigned int xdp_xmit = 0;
+	int rx_processed = 0;
 	struct xdp_buff xdp;
-
-	/* Frame size depend on rx_ring setup when PAGE_SIZE=4K */
-#if (PAGE_SIZE < 8192)
-	frame_sz = ixgbe_rx_frame_truesize(rx_ring, 0);
-#endif
-	xdp_init_buff(&xdp, frame_sz, &rx_ring->xdp_rxq);
+	//int v_idx = q_vector->v_idx;
+	
+	xdp.rxq = &rx_ring->xdp_rxq;
 
 	while (likely(total_rx_packets < budget)) {
 		union ixgbe_adv_rx_desc *rx_desc;
@@ -2330,16 +2522,15 @@ static int ixgbe_clean_rx_irq(struct ixgbe_q_vector *q_vector,
 
 		/* retrieve a buffer from the ring */
 		if (!skb) {
-			unsigned char *hard_start;
+			xdp.data = page_address(rx_buffer->page) +
+				   rx_buffer->page_offset;
+			xdp.data_meta = xdp.data;
+			xdp.data_hard_start = xdp.data -
+					      ixgbe_rx_offset(rx_ring);
+			xdp.data_end = xdp.data + size;
 
-			hard_start = page_address(rx_buffer->page) +
-				     rx_buffer->page_offset - offset;
-			xdp_prepare_buff(&xdp, hard_start, offset, size, true);
-#if (PAGE_SIZE > 4096)
-			/* At larger PAGE_SIZE, frame_sz depend on len size */
-			xdp.frame_sz = ixgbe_rx_frame_truesize(rx_ring, size);
-#endif
 			skb = ixgbe_run_xdp(adapter, rx_ring, &xdp);
+		
 		}
 
 		if (IS_ERR(skb)) {
@@ -2416,6 +2607,7 @@ static int ixgbe_clean_rx_irq(struct ixgbe_q_vector *q_vector,
 
 		/* update budget accounting */
 		total_rx_packets++;
+		rx_processed ++;
 	}
 
 	if (xdp_xmit & IXGBE_XDP_REDIR)
@@ -2437,6 +2629,13 @@ static int ixgbe_clean_rx_irq(struct ixgbe_q_vector *q_vector,
 	u64_stats_update_end(&rx_ring->syncp);
 	q_vector->rx.total_packets += total_rx_packets;
 	q_vector->rx.total_bytes += total_rx_bytes;
+
+	if(hw->mac.addr[ETH_ALEN-1] == 0x00 || hw->mac.addr[ETH_ALEN-1] == 0x04 || hw->mac.addr[ETH_ALEN-1] == 0x82) {
+	  q_vector->rx.per_itr_packets += total_rx_packets;
+	  q_vector->rx.per_itr_bytes += total_rx_bytes;	    
+	  q_vector->rx.per_itr_desc += rx_processed;	  
+	  q_vector->rx.per_itr_free_budget += (budget - total_rx_packets);
+	}
 
 	return total_rx_packets;
 }
@@ -3120,9 +3319,240 @@ static irqreturn_t ixgbe_msix_other(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+
+
+inline static uint64_t ixgbe_rdtsc(void) {
+  uint64_t tsc;
+  asm volatile("rdtsc;"
+               "shl $32,%%rdx;"
+               "or %%rdx,%%rax"
+               : "=a"(tsc)
+               :
+               : "%rcx", "%rdx");
+  return tsc;
+}
+
+inline static void write_nti64(void *p, const uint64_t v)
+{
+  asm volatile("movnti %0, (%1)\n\t"
+	       :
+	       : "r"(v), "r"(p)
+	       : "memory");
+}
+
+inline static void write_nti32(void *p, const uint32_t v)
+{
+  asm volatile("movnti %0, (%1)\n\t"
+	       :
+	       : "r"(v), "r"(p)
+	       : "memory");
+}
+
 static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
 {
 	struct ixgbe_q_vector *q_vector = data;
+
+	struct ixgbe_adapter *adapter = q_vector->adapter;
+        struct ixgbe_hw *hw = &adapter->hw;
+	struct IxgbeLog *il;
+	union IxgbeLogEntry *ile;
+        int v_idx = 0;
+        int icnt = 0;
+        uint64_t now = 0, last = 0, tmp = 0, res = 0;
+	struct cpuidle_device *cpu_idle_dev = __this_cpu_read(cpuidle_devices);
+
+	/*if(hw->mac.addr[ETH_ALEN-1] == 0x00 || hw->mac.addr[ETH_ALEN-1] == 0x04 || hw->mac.addr[ETH_ALEN-1] == 0x82) {
+          v_idx = q_vector->v_idx;
+	  il = &ixgbe_logs[v_idx];
+	    
+          icnt = il->itr_cnt;	  
+          if (icnt < IXGBE_LOG_SIZE) {
+	    ile = &il->log[icnt];	    
+
+	    // initialize perf counters
+	    if(il->perf_started == 0) {
+	      // init ins, cycles. ref_cycles
+	      wrmsrl(0x38D, 0x333);
+	      
+	      // init llc_miss
+	      wrmsrl(0x186, 0x43412E);
+	      
+	      // start
+	      wrmsrl(0x38F, 0x700000001);	      
+	      il->perf_started = 1;
+	    }	  
+
+	    // save timestamp
+	    now = ixgbe_rdtsc();
+	    write_nti64(&ile->Fields.tsc, now);
+	    
+	    write_nti32(&(ile->Fields.rx_desc), q_vector->rx.per_itr_desc);
+	    write_nti32(&(ile->Fields.rx_bytes), q_vector->rx.per_itr_bytes);
+	    write_nti32(&(ile->Fields.rx_free_budget), q_vector->rx.per_itr_free_budget);
+	    
+	    //reset
+	    q_vector->rx.per_itr_desc = 0;
+	    q_vector->rx.per_itr_packets = 0;
+	    q_vector->rx.per_itr_bytes = 0;
+            q_vector->rx.per_itr_free_budget = 0;
+
+            q_vector->tx.per_itr_desc = 0;
+            q_vector->tx.per_itr_packets = 0;
+            q_vector->tx.per_itr_bytes = 0;
+            q_vector->tx.per_itr_free_budget = 0;
+
+	    il->itr_cnt++;
+          }
+	}*/
+	
+	// log data into memory
+        if(hw->mac.addr[ETH_ALEN-1] == 0x00 || hw->mac.addr[ETH_ALEN-1] == 0x04 || hw->mac.addr[ETH_ALEN-1] == 0x82) {
+          v_idx = q_vector->v_idx;
+	  il = &ixgbe_logs[v_idx];
+	    
+          icnt = il->itr_cnt;
+	  
+          if (icnt < IXGBE_LOG_SIZE) {
+	    ile = &il->log[icnt];
+
+	    // save timestamp
+	    now = ixgbe_rdtsc();
+	    write_nti64(&ile->Fields.tsc, now);
+	    //ile->Fields.tsc = now;
+
+	    // capture on every interrupt
+	    //if(il->perf_started) {
+	      // llc
+	      //rdmsrl(0xC1, tmp);
+	      //write_nti64(&ile->Fields.nllc_miss, tmp);
+	      //ile->Fields.nllc_miss = tmp;
+	      
+	      // ins
+	      //rdmsrl(0x309, tmp);
+	      //write_nti64(&ile->Fields.ninstructions, tmp);
+	      //ile->Fields.ninstructions = tmp;
+	      
+	      // cycles
+	      //rdmsrl(0x30A, tmp);
+	      //write_nti64(&ile->Fields.ncycles, tmp);
+	      //ile->Fields.ncycles = tmp;
+	      
+	      // ref cycles
+	      //rdmsrl(0x30B, tmp);
+	      //write_nti64(&ile->Fields.nref_cycles, tmp);
+	      //ile->Fields.nref_cycles = tmp;
+	    //}
+		    
+	    last = il->itr_joules_last_tsc;
+	    // capture after ~1 ms has passed
+	    if ((now - last) > ixgbe_tsc_per_milli) {
+	      // save joules
+	      rdmsrl(0x611, res);
+	      write_nti64(&ile->Fields.joules, res);
+	      //ile->Fields.joules = res;
+	      
+	      il->itr_joules_last_tsc = now;
+	      if(il->perf_started) {
+		// llc
+		rdmsrl(0xC1, tmp);
+		write_nti64(&ile->Fields.nllc_miss, tmp);
+		//ile->Fields.nllc_miss = tmp;
+		
+		// ins
+		rdmsrl(0x309, tmp);
+		write_nti64(&ile->Fields.ninstructions, tmp);
+		//ile->Fields.ninstructions = tmp;
+		
+		// cycles
+		rdmsrl(0x30A, tmp);
+		write_nti64(&ile->Fields.ncycles, tmp);
+		//ile->Fields.ncycles = tmp;
+		
+		// ref cycles
+		rdmsrl(0x30B, tmp);
+		write_nti64(&ile->Fields.nref_cycles, tmp);
+		//ile->Fields.nref_cycles = tmp;
+		
+		// c states, hardcoded for our processors
+		/*write_nti64(&ile->Fields.c1, (cpu_idle_dev->states_usage[1]).usage);
+		write_nti64(&ile->Fields.c1e, (cpu_idle_dev->states_usage[2]).usage);
+		write_nti64(&ile->Fields.c3, (cpu_idle_dev->states_usage[3]).usage);
+		write_nti64(&ile->Fields.c6, (cpu_idle_dev->states_usage[4]).usage);
+		write_nti64(&ile->Fields.c7, (cpu_idle_dev->states_usage[5]).usage);
+		*/
+
+		write_nti64(&ile->Fields.c0, cpu_idle_dev->intel_idle_states_usage[0]);
+		write_nti64(&ile->Fields.c1, cpu_idle_dev->intel_idle_states_usage[1]);
+		write_nti64(&ile->Fields.c1e, cpu_idle_dev->intel_idle_states_usage[2]);
+		write_nti64(&ile->Fields.c3, cpu_idle_dev->intel_idle_states_usage[3]);
+		write_nti64(&ile->Fields.c6, cpu_idle_dev->intel_idle_states_usage[4]
+			    +cpu_idle_dev->intel_idle_states_usage[6]
+			    +cpu_idle_dev->intel_idle_states_usage[7]
+			    +cpu_idle_dev->intel_idle_states_usage[8]
+			    +cpu_idle_dev->intel_idle_states_usage[9]);
+		write_nti64(&ile->Fields.c7, cpu_idle_dev->intel_idle_states_usage[5]);
+		
+		//rdmsrl(0x3FC, res);
+		//ile->Fields.c3 = res;
+		//rdmsrl(0x3FD, res);
+		//ile->Fields.c6 = res;
+		//rdmsrl(0x3FE, res);
+		//write_nti64(&ile->Fields.c7, 0);
+		//ile->Fields.c7 = res;
+	      }
+
+	      // initialize perf counters
+	      if(il->perf_started == 0) {
+		// init ins, cycles. ref_cycles
+		wrmsrl(0x38D, 0x333);
+		
+		// init cycles
+		//wrmsrl(0x38D, 0x33);
+		
+		// init llc_miss
+		wrmsrl(0x186, 0x43412E);
+		
+		// start
+		//wrmsrl(0x38F, 0x1);
+		//wrmsrl(0x38F, 0x100000001);
+		
+		wrmsrl(0x38F, 0x700000001);
+		
+		il->perf_started = 1;
+	      }
+	    }
+	    
+	    //ile->Fields.rx_desc = q_vector->rx.per_itr_desc;
+	    //ile->Fields.rx_bytes = q_vector->rx.per_itr_bytes;
+	    //ile->Fields.tx_desc = q_vector->rx.per_itr_desc;
+	    //ile->Fields.tx_bytes = q_vector->rx.per_itr_bytes;
+	    write_nti32(&(ile->Fields.rx_desc), q_vector->rx.per_itr_desc);
+	    write_nti32(&(ile->Fields.rx_bytes), q_vector->rx.per_itr_bytes);
+	    write_nti32(&(ile->Fields.tx_desc), q_vector->tx.per_itr_desc);
+	    write_nti32(&(ile->Fields.tx_bytes), q_vector->tx.per_itr_bytes);
+	    
+	    //ile->Fields.c3 = (uint64_t)eicr;
+	    //ile->Fields.c6 = (uint64_t)eics0;
+	    //ile->Fields.c7 = (uint64_t)eics1;
+	    
+	    //write_nti64(&ile->Fields.c3, (uint64_t)eicr);
+	    //write_nti64(&ile->Fields.c6, (uint64_t)6);
+	    //write_nti64(&ile->Fields.c7, (uint64_t)7);
+	    
+	    //reset
+	    q_vector->rx.per_itr_desc = 0;
+	    q_vector->rx.per_itr_packets = 0;
+	    q_vector->rx.per_itr_bytes = 0;
+            q_vector->rx.per_itr_free_budget = 0;
+
+            q_vector->tx.per_itr_desc = 0;
+            q_vector->tx.per_itr_packets = 0;
+            q_vector->tx.per_itr_bytes = 0;
+            q_vector->tx.per_itr_free_budget = 0;
+
+	    il->itr_cnt++;
+          }
+	}
 
 	/* EIAM disabled interrupts (on this vector) for us */
 
@@ -3144,10 +3574,11 @@ int ixgbe_poll(struct napi_struct *napi, int budget)
 	struct ixgbe_q_vector *q_vector =
 				container_of(napi, struct ixgbe_q_vector, napi);
 	struct ixgbe_adapter *adapter = q_vector->adapter;
+	//struct ixgbe_hw *hw = &adapter->hw;
 	struct ixgbe_ring *ring;
 	int per_ring_budget, work_done = 0;
 	bool clean_complete = true;
-
+	
 #ifdef CONFIG_IXGBE_DCA
 	if (adapter->flags & IXGBE_FLAG_DCA_ENABLED)
 		ixgbe_update_dca(q_vector);
@@ -3197,7 +3628,7 @@ int ixgbe_poll(struct napi_struct *napi, int budget)
 			ixgbe_irq_enable_queues(adapter,
 						BIT_ULL(q_vector->v_idx));
 	}
-
+	 
 	return min(work_done, budget - 1);
 }
 
@@ -3214,10 +3645,12 @@ static int ixgbe_request_msix_irqs(struct ixgbe_adapter *adapter)
 	unsigned int ri = 0, ti = 0;
 	int vector, err;
 
-	for (vector = 0; vector < adapter->num_q_vectors; vector++) {
+	for (vector = 0; vector < adapter->num_q_vectors; vector++) {	
 		struct ixgbe_q_vector *q_vector = adapter->q_vector[vector];
 		struct msix_entry *entry = &adapter->msix_entries[vector];
 
+		printk(KERN_INFO "ixgbe_request_msix_irqs vector=%d\n", vector);
+	
 		if (q_vector->tx.ring && q_vector->rx.ring) {
 			snprintf(q_vector->name, sizeof(q_vector->name),
 				 "%s-TxRx-%u", netdev->name, ri++);
@@ -6786,8 +7219,83 @@ int ixgbe_open(struct net_device *netdev)
 {
 	struct ixgbe_adapter *adapter = netdev_priv(netdev);
 	struct ixgbe_hw *hw = &adapter->hw;
-	int err, queues;
+	int err, queues, i;//, j;
+	uint64_t now;
+	struct cpuidle_device *dev = __this_cpu_read(cpuidle_devices);
+	struct cpuidle_driver *drv = cpuidle_get_cpu_driver(dev);
+	
+	//u8 inb0x43, inb0x40_1, inb0x40_2, lo, hi;
+	//uint16_t start_tick, end_tick, total_tick;
+	//uint64_t start_tsc, end_tsc, total_tsc, freq, step;	  
+	
+	printk(KERN_INFO "ixgbe_open()\n");
+	
+	printk(KERN_INFO "cpuidle stats state_count=%d\n", drv->state_count);
+	for(i=0;i<drv->state_count;i++) {
+	  printk(KERN_INFO "i=%d name=%s exit_latency=%u target_residency=%u\n",
+		 i, drv->states[i].name,
+		 drv->states[i].exit_latency, drv->states[i].target_residency);
+	}
+	
+	for(i=0; i<16; i++) {	  
+	  ixgbe_logs[i].log = (union IxgbeLogEntry *)vmalloc(sizeof(union IxgbeLogEntry) * IXGBE_LOG_SIZE);
+	  printk(KERN_INFO "%d vmalloc size=%lu addr=%p\n", i, (sizeof(union IxgbeLogEntry) * IXGBE_LOG_SIZE), (void*)(ixgbe_logs[i].log));
+	  memset(ixgbe_logs[i].log, 0, (sizeof(union IxgbeLogEntry) * IXGBE_LOG_SIZE));
+	  if(!(ixgbe_logs[i].log)) {
+	    printk(KERN_INFO "Fail to vmalloc ixgbe_logs[%d]->log\n", i);
+	  }
 
+	  ixgbe_logs[i].itr_joules_last_tsc = 0;
+	  ixgbe_logs[i].msix_other_cnt = 0;
+	  ixgbe_logs[i].itr_cookie = 0;
+	  ixgbe_logs[i].non_itr_cnt = 0;
+	  ixgbe_logs[i].itr_cnt = 0;
+	  ixgbe_logs[i].perf_started = 0;  	  
+	}
+	//memset(ixgbe_logs, 0, sizeof(ixgbe_logs));	
+	ixgbe_tsc_per_milli = tsc_khz;
+	
+	now = ixgbe_rdtsc();	
+	write_nti64(&(ixgbe_logs[0].log[0].Fields.tsc), now);
+	printk(KERN_INFO "+++++ ixgbe_open tsc_khz = %u now=%llu tsc=%llu ++++++\n",
+	       tsc_khz, now, ixgbe_logs[0].log[0].Fields.tsc);
+	
+	/******************** EbbRT PitClock.cc START*****************/
+        /*outb(0x43, 0x34);
+	outb(0x40, 0);
+	outb(0x40, 0);
+
+	// Read tick count (uses latch command)
+        outb(0x43, 0x04);
+	lo = inb(0x40);
+	hi = inb(0x40);
+
+	// Set boot time values
+	start_tick = (hi << 8) + lo;
+	end_tick = 0;
+	total_tick = 0;
+	start_tsc = (uint64_t)rdtsc();
+	end_tsc = 0;
+	total_tsc = 0;
+	step = 10000000;
+	freq = 1193182;
+	
+	do {
+	  end_tsc = (uint64_t)rdtsc();
+	} while ((end_tsc - start_tsc) < step);
+	
+	// Read tick count after loop
+        outb(0x43, 0x04);
+	lo = inb(0x40);
+	hi = inb(0x40);
+	end_tick = (hi << 8) + lo;
+	
+	// Calculate elapsed ticks (in PIT and tsc)
+	total_tick = (start_tick - end_tick);
+	total_tsc = (end_tsc - start_tsc);
+	printk(KERN_INFO "+++ Linux TSC=0x%llX PIT=0x%X start_tick=0x%X end_tick=0x%X +++\n", total_tsc, total_tick&0xFFFF, start_tick&0xFFFF, end_tick&0xFFFF);*/
+	/******************** EbbRT PitClock.cc END*****************/
+	
 	/* disallow open during test */
 	if (test_bit(__IXGBE_TESTING, &adapter->state))
 		return -EBUSY;
@@ -6876,7 +7384,8 @@ static void ixgbe_close_suspend(struct ixgbe_adapter *adapter)
 int ixgbe_close(struct net_device *netdev)
 {
 	struct ixgbe_adapter *adapter = netdev_priv(netdev);
-
+	int i;
+	
 	ixgbe_ptp_stop(adapter);
 
 	if (netif_device_present(netdev))
@@ -6886,6 +7395,12 @@ int ixgbe_close(struct net_device *netdev)
 
 	ixgbe_release_hw_control(adapter);
 
+	for(i=0;i<16;i++) {
+	  if(ixgbe_logs[i].log) {
+	    vfree(ixgbe_logs[i].log);
+	  }	  
+	}
+	
 	return 0;
 }
 
@@ -10776,6 +11291,8 @@ static int ixgbe_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto err_sw_init;
 	}
 
+	printk(KERN_INFO "*** ixgbe_probe device_id=%u vendor_id=%u\n", hw->device_id, hw->vendor_id);
+	
 #ifdef CONFIG_PCI_IOV
 	/* SR-IOV not supported on the 82598 */
 	if (adapter->hw.mac.type == ixgbe_mac_82598EB)
@@ -11044,15 +11561,10 @@ skip_sriov:
 		hw->mac.ops.setup_link(hw,
 			IXGBE_LINK_SPEED_10GB_FULL | IXGBE_LINK_SPEED_1GB_FULL,
 			true);
-
-	err = ixgbe_mii_bus_init(hw);
-	if (err)
-		goto err_netdev;
-
+	ixgbe_mii_bus_init(hw);
 	return 0;
 
-err_netdev:
-	unregister_netdev(netdev);
+
 err_register:
 	ixgbe_release_hw_control(adapter);
 	ixgbe_clear_interrupt_scheme(adapter);
@@ -11386,9 +11898,11 @@ static struct pci_driver ixgbe_driver = {
 static int __init ixgbe_init_module(void)
 {
 	int ret;
-	pr_info("%s\n", ixgbe_driver_string);
+	unsigned long i;
+	
+	pr_info("%s - version %s\n", ixgbe_driver_string, ixgbe_driver_version);
 	pr_info("%s\n", ixgbe_copyright);
-
+	
 	ixgbe_wq = create_singlethread_workqueue(ixgbe_driver_name);
 	if (!ixgbe_wq) {
 		pr_err("%s: Failed to create workqueue\n", ixgbe_driver_name);
@@ -11403,11 +11917,38 @@ static int __init ixgbe_init_module(void)
 		ixgbe_dbg_exit();
 		return ret;
 	}
-
 #ifdef CONFIG_IXGBE_DCA
 	dca_register_notify(&dca_notifier);
 #endif
-
+	
+	/* Create /proc/ixgbe_stats */
+	ixgbe_stats_dir = proc_mkdir("ixgbe_stats", NULL);
+	if(!ixgbe_stats_dir) {
+	  printk(KERN_ERR "Couldn't create base directory /proc/ixgbe_stats/\n");
+	  return -ENOMEM;
+	}
+	
+	ixgbe_core_dir = proc_mkdir("core", ixgbe_stats_dir);
+	if(!ixgbe_core_dir) {
+	  printk(KERN_ERR "Couldn't create base directory /proc/ixgbe_stats/core/\n");
+	  return -ENOMEM;
+	}
+	
+	for(i=0;i<16;i++) {
+	  char name[4];	  
+	  sprintf(name, "%ld", i);	  
+	  if(!proc_create_data(name, 0444, ixgbe_core_dir, &ct_file_ops, (void*)i)) {
+	    printk(KERN_ERR "Couldn't create base directory /proc/ixgbe_stats/core/%ld\n", i);
+	  }     
+	}
+	printk(KERN_INFO "Successfully loaded /proc/ixgbe_stats/\n");
+	
+	/*han_entry = proc_create("han_readme1", 0, NULL, &ct_file_ops);
+	if(han_entry) {
+	  return 0;
+	} else {
+	  return -EINVAL;
+	  }*/
 	return 0;
 }
 
@@ -11421,6 +11962,10 @@ module_init(ixgbe_init_module);
  **/
 static void __exit ixgbe_exit_module(void)
 {
+  //procfs
+  remove_proc_subtree("ixgbe_stats", NULL);
+  //remove_proc_entry("han_readme1", NULL);
+  
 #ifdef CONFIG_IXGBE_DCA
 	dca_unregister_notify(&dca_notifier);
 #endif
@@ -11430,7 +11975,7 @@ static void __exit ixgbe_exit_module(void)
 	if (ixgbe_wq) {
 		destroy_workqueue(ixgbe_wq);
 		ixgbe_wq = NULL;
-	}
+	}	
 }
 
 #ifdef CONFIG_IXGBE_DCA

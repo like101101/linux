@@ -3367,7 +3367,7 @@ static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
 	    
           icnt = il->itr_cnt;	  
           if (icnt < IXGBE_LOG_SIZE) {
-	    ile = &il->log[icnt];	    
+	  ile = &il->log[icnt];	    
 
 	    // initialize perf counters
 	    if(il->perf_started == 0) {
@@ -3404,9 +3404,85 @@ static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
 	    il->itr_cnt++;
           }
 	}*/
-	
+
+	// log data into memory every 1 millisecond
+	if(hw->mac.addr[ETH_ALEN-1] == 0x00 || hw->mac.addr[ETH_ALEN-1] == 0x04 || hw->mac.addr[ETH_ALEN-1] == 0x82) {
+	  // get core id
+          v_idx = q_vector->v_idx;
+
+	  // get per core log
+	  il = &ixgbe_logs[v_idx];
+
+	  // check if log entry will be within pre-allocated bounds
+	  icnt = il->itr_cnt;
+          if (icnt < IXGBE_LOG_SIZE) {
+	    // initialize perf counters
+	    if(il->perf_started == 0) {
+	      // init ins, cycles. ref_cycles
+	      wrmsrl(0x38D, 0x333);	      
+	      // init llc_miss
+	      wrmsrl(0x186, 0x43412E);
+	      // start perf
+	      wrmsrl(0x38F, 0x700000001);
+	      
+	      il->perf_started = 1;
+	    }
+	      
+	    // get current timestamp
+	    now = ixgbe_rdtsc();
+	    last = il->itr_joules_last_tsc;
+	    
+	    // capture after ~1 ms has passed
+	    if ((now - last) > ixgbe_tsc_per_milli) {
+	      ile = &il->log[icnt];
+
+	      //save timestamp
+	      write_nti64(&ile->Fields.tsc, now);
+	      
+	      // save joules
+	      rdmsrl(0x611, res);
+	      write_nti64(&ile->Fields.joules, res);
+	      
+	      il->itr_joules_last_tsc = now;
+	      if(il->perf_started) {
+		// llc
+		rdmsrl(0xC1, tmp);
+		write_nti64(&ile->Fields.nllc_miss, tmp);
+		
+		// ins
+		rdmsrl(0x309, tmp);
+		write_nti64(&ile->Fields.ninstructions, tmp);
+		
+		// cycles
+		rdmsrl(0x30A, tmp);
+		write_nti64(&ile->Fields.ncycles, tmp);
+		
+		// ref cycles
+		rdmsrl(0x30B, tmp);
+		write_nti64(&ile->Fields.nref_cycles, tmp);
+
+		write_nti32(&(ile->Fields.rx_desc), q_vector->rx.per_itr_desc);
+		write_nti32(&(ile->Fields.rx_bytes), q_vector->rx.per_itr_bytes);
+		write_nti32(&(ile->Fields.tx_desc), q_vector->tx.per_itr_desc);
+		write_nti32(&(ile->Fields.tx_bytes), q_vector->tx.per_itr_bytes);
+			    
+		//reset
+		q_vector->rx.per_itr_desc = 0;
+		q_vector->rx.per_itr_packets = 0;
+		q_vector->rx.per_itr_bytes = 0;
+		q_vector->rx.per_itr_free_budget = 0;
+		
+		q_vector->tx.per_itr_desc = 0;
+		q_vector->tx.per_itr_packets = 0;
+		q_vector->tx.per_itr_bytes = 0;
+		q_vector->tx.per_itr_free_budget = 0;	    
+	      }
+	      il->itr_cnt++;
+	    }
+	  }
+	}
 	// log data into memory
-        if(hw->mac.addr[ETH_ALEN-1] == 0x00 || hw->mac.addr[ETH_ALEN-1] == 0x04 || hw->mac.addr[ETH_ALEN-1] == 0x82) {
+        /*if(hw->mac.addr[ETH_ALEN-1] == 0x00 || hw->mac.addr[ETH_ALEN-1] == 0x04 || hw->mac.addr[ETH_ALEN-1] == 0x82) {
           v_idx = q_vector->v_idx;
 	  il = &ixgbe_logs[v_idx];
 	    
@@ -3474,12 +3550,12 @@ static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
 		//ile->Fields.nref_cycles = tmp;
 		
 		// c states, hardcoded for our processors
-		/*write_nti64(&ile->Fields.c1, (cpu_idle_dev->states_usage[1]).usage);
-		write_nti64(&ile->Fields.c1e, (cpu_idle_dev->states_usage[2]).usage);
-		write_nti64(&ile->Fields.c3, (cpu_idle_dev->states_usage[3]).usage);
-		write_nti64(&ile->Fields.c6, (cpu_idle_dev->states_usage[4]).usage);
-		write_nti64(&ile->Fields.c7, (cpu_idle_dev->states_usage[5]).usage);
-		*/
+		//write_nti64(&ile->Fields.c1, (cpu_idle_dev->states_usage[1]).usage);
+		//write_nti64(&ile->Fields.c1e, (cpu_idle_dev->states_usage[2]).usage);
+		//write_nti64(&ile->Fields.c3, (cpu_idle_dev->states_usage[3]).usage);
+		//write_nti64(&ile->Fields.c6, (cpu_idle_dev->states_usage[4]).usage);
+		//write_nti64(&ile->Fields.c7, (cpu_idle_dev->states_usage[5]).usage);
+		
 
 		write_nti64(&ile->Fields.c0, cpu_idle_dev->intel_idle_states_usage[0]);
 		write_nti64(&ile->Fields.c1, cpu_idle_dev->intel_idle_states_usage[1]);
@@ -3552,7 +3628,7 @@ static irqreturn_t ixgbe_msix_clean_rings(int irq, void *data)
 
 	    il->itr_cnt++;
           }
-	}
+	  }*/
 
 	/* EIAM disabled interrupts (on this vector) for us */
 

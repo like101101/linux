@@ -100,7 +100,9 @@ struct cpuidle_device {
 	u64			last_residency_ns;
 	u64			poll_limit_ns;
 	u64			forced_idle_latency_limit_ns;
-	struct cpuidle_state_usage	states_usage[CPUIDLE_STATE_MAX];
+        long long intel_idle_states_usage[CPUIDLE_STATE_MAX];
+        
+        struct cpuidle_state_usage	states_usage[CPUIDLE_STATE_MAX];
 	struct cpuidle_state_kobj *kobjs[CPUIDLE_STATE_MAX];
 	struct cpuidle_driver_kobj *kobj_driver;
 	struct cpuidle_device_kobj *kobj_dev;
